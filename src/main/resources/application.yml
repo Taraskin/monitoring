@@ -1,0 +1,24 @@
+#Database Configuration
+spring:
+  datasource:
+    username: 'dev'
+    password: 'secret'
+    url: 'jdbc:mysql://localhost:3309/monitoring'
+
+  #JPA / Hibernate Configuration
+  jpa:
+    hibernate:
+      ddl-auto: update
+    show-sql: true
+    generate-ddl: true
+    database: mysql
+    open-in-view: off
+
+  # Security Configuration
+  security:
+    jwt:
+      secret: SomeSecretKey
+      expirationMs: 3600000 # 1000 * 60 * 60 = 3600000 ms (1 hour)
+  mvc:
+    view:
+      suffix: .html

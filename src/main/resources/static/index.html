@@ -1,0 +1,224 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Monitoring Service</title>
+    <link rel="stylesheet" href="style.css" type="text/css">
+</head>
+<body>
+<h3>Services Monitoring</h3>
+<h4>Login</h4>
+<div id="logged-out" style="display: block">
+    <!--    <button id="login-modal-btn" style="width:auto;">Login</button>-->
+    <div class="login-form">
+        <div class="container">
+            <label for="username"><b>Username</b></label>
+            <input id="username" type="text" placeholder="Enter Username" name="username" required>
+            <label for="password"><b>Password</b></label>
+            <input id="password" type="password" placeholder="Enter Password" name="password" required>
+            <button id="login-btn" type="submit">Login</button>
+        </div>
+    </div>
+</div>
+<div id="logged-in" style="display: none">
+    <div id="add-service">
+        <button id="add-service-modal-btn" class="item-add">Add service</button>
+    </div>
+    <div id="service-block">
+        <ul id="service-list"></ul>
+    </div>
+</div>
+<div id="service-modal-window" class="modal">
+    <form class="modal-content animate" action="/api/services" method="post">
+        <div class="imgcontainer">
+            <span onclick="document.getElementById('service-modal-window').style.display='none'" class="close"
+                  title="Close Modal">&times;</span>
+        </div>
+        <div class="container">
+            <label for="service-name"><b>Service Name</b></label>
+            <input id="service-name" type="text" placeholder="Enter service name" name="service-name" required>
+            <label for="service-url"><b>Service URL</b></label>
+            <input id="service-url" type="text" placeholder="Enter URL" name="service-url" required>
+            <button id="service-submit-btn" type="submit">Save</button>
+        </div>
+    </form>
+</div>
+</body>
+<script>
+    let user = {
+        username: null,
+        token: null,
+    }
+
+    let service = {}
+    let serviceName = document.getElementById('service-name');
+    let serviceUrl = document.getElementById('service-url');
+    let serviceSubmitBtn = document.getElementById('service-submit-btn');
+
+    serviceName.onchange = function () {
+        service.name = serviceName.value
+    }
+    serviceUrl.onchange = function () {
+        service.url = serviceUrl.value
+    }
+    serviceUrl.onkeypress = function () {
+        serviceSubmitBtn.disabled = !isValidUrl(serviceUrl.value)
+    }
+
+    let headers = {
+        'Content-Type': 'application/json',
+    };
+
+    const loggedInDiv = document.getElementById('logged-in');
+    const loggedOutDiv = document.getElementById('logged-out');
+
+    const serviceModalWindow = document.getElementById('service-modal-window');
+    // When the user clicks anywhere outside of the modal, close it
+    window.onclick = function (event) {
+        if (event.target === serviceModalWindow) {
+            serviceModalWindow.style.display = 'none'
+        }
+    }
+
+    // Open Modal window
+    document.getElementById('add-service-modal-btn').onclick = function (event) {
+        event.preventDefault()
+        console.log('Show service modal')
+        serviceName.value = ''
+        serviceUrl.value = ''
+        serviceSubmitBtn.disabled = !isValidUrl(serviceUrl.value)
+        serviceModalWindow.style.display = 'block';
+    }
+
+    // Login
+    document.getElementById('login-btn').onclick = function (event) {
+        event.preventDefault()
+        let username = document.getElementById('username').value;
+        console.log(`Logging... ${username}`)
+        let loginData = {
+            username: username,
+            password: document.getElementById('password').value
+        }
+
+        fetchData('/api/auth/login', 'POST', headers, loginData, function (data) {
+                console.log(`Logged in as [${username}]. Token: ${data.token}`, data);
+                loggedInDiv.style.display = 'block';
+                loggedOutDiv.style.display = 'none';
+                user = data
+                headers.Authorization = 'Bearer ' + user.token
+                fetchServices(user)
+            }
+        );
+    }
+
+    // Submit service Create / Update
+    serviceSubmitBtn.onclick = function (event) {
+        event.preventDefault()
+        fetchData('/api/services', service.method ? 'PUT' : 'POST', headers, service, function (data) {
+                serviceModalWindow.style.display = 'none'
+                service.method ? updateService(data) : appendService(data)
+                serviceName.value = ''
+                serviceUrl.value = ''
+                service = {}
+            }
+        );
+    }
+
+    function updateServiceById(id) {
+        fetchData(`/api/services/${id}`, 'GET', headers, null, function (data) {
+            console.log(`Fetched service: ${JSON.stringify(data)}`);
+            service = data
+            service.method = 'PUT'
+            serviceName.value = service.name
+            serviceUrl.value = service.url
+            serviceSubmitBtn.disabled = !isValidUrl(serviceUrl.value)
+            serviceModalWindow.style.display = 'block';
+        });
+    }
+
+    function fetchServices() {
+        setInterval(function () {
+            fetchData('/api/services/', 'GET', headers, null, function (data) {
+                // document.getElementById('service-list').remove();
+                // document.getElementById('service-block').insertAdjacentHTML('afterbegin', '<ul class="service-list"></ul>')
+                document.getElementById('service-block').innerHTML = '<ul class="service-list"></ul>'
+                data.forEach(element => appendService(element));
+            });
+        }, 10000);
+    }
+
+    function deleteServiceById(id) {
+        fetchData(`/api/services/${id}`, 'DELETE', headers, null, function () {
+            document.getElementById(id).remove()
+        })
+    }
+
+    function fetchData(url, method, headers, payload, onSuccess) {
+        console.log(`Calling: ${method} ${url} --->`)
+        let body = payload ? JSON.stringify(payload) : null
+        return fetch(url, {
+            method: method,
+            headers: headers,
+            body: body,
+        }).then(response => {
+            if (response.ok) {
+                return response.json();
+            }
+            return Promise.reject(response);
+        }).then(json => {
+            console.log('<--- OK')
+            try {
+                onSuccess(json)
+            } catch (e) {
+                console.log(e.message)
+            }
+        }).catch(response => {
+            console.log('Error: ', response);
+            // response.json().then((json) => {
+            //     console.log(response.status, JSON.stringify(json));
+            // })
+        });
+    }
+
+    function appendService(service) {
+        let html = generateHTML(service)
+        document.querySelector('ul').insertAdjacentHTML('beforeend', html);
+    }
+
+    function updateService(service) {
+        document.getElementById(service.id).innerHTML = generateHTML(service);
+    }
+
+    function generateHTML(service) {
+        let status = service.status;
+        let statusClass = status ? `${status.toLowerCase()}-status` : 'no-status'
+        return `<li id="${service.id}" >
+            <div class="item-content">
+                <div class="child">
+                    <p>${service.name}</p>
+                    <a href="${service.url}" class="item-link">${service.url}</a>
+                    <p>${toDate(service.created)}</p>
+                    <p>${toDate(service.updated)}</p>
+                    <span class="status item-status ${statusClass}">${status ? status : ''}</span>
+                    <button id="edit-btn" class="item-edit" onclick="updateServiceById(${service.id})">Edit</button>
+                    <button id="delete-btn" class="item-delete" onclick="deleteServiceById(${service.id})">Delete</button>
+                </div>
+            </div>
+        </li>`
+    }
+
+    const toDate = (dt) => {
+        return dt.split('.')[0].replace('T', ' ')
+    }
+
+    const isValidUrl = (url) => {
+        try {
+            new URL(url);
+        } catch (e) {
+            console.error(e);
+            return false;
+        }
+        return true;
+    }
+</script>
+</html>
